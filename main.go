@@ -14,14 +14,6 @@ import (
 	"github.com/optiopay/kafka/proto"
 )
 
-var config struct {
-	kafka          string
-	topic          string
-	partition      uint
-	updateInterval time.Duration
-	client         string
-}
-
 type result struct {
 	count  uint64
 	persec uint64
@@ -74,6 +66,15 @@ func startOptiopay() (chan result, error) {
 	producerConf.Compression = proto.CompressionSnappy
 	producerConf.RequestTimeout = time.Second
 	producerConf.RetryLimit = 1
+
+	switch config.ack {
+	case "none":
+		producerConf.RequiredAcks = proto.RequiredAcksNone
+	case "local":
+		producerConf.RequiredAcks = proto.RequiredAcksLocal
+	case "all":
+		producerConf.RequiredAcks = proto.RequiredAcksAll
+	}
 
 	producer := broker.Producer(producerConf)
 
@@ -131,9 +132,17 @@ func startSarama() (chan result, error) {
 
 	saramaConfig := sarama.NewConfig()
 
-	saramaConfig.Producer.RequiredAcks = sarama.WaitForLocal     // Only wait for the leader to ack
 	saramaConfig.Producer.Compression = sarama.CompressionSnappy // Compress messages
 	saramaConfig.Producer.Return.Successes = true
+
+	switch config.ack {
+	case "none":
+		saramaConfig.Producer.RequiredAcks = sarama.NoResponse
+	case "local":
+		saramaConfig.Producer.RequiredAcks = sarama.WaitForLocal
+	case "all":
+		saramaConfig.Producer.RequiredAcks = sarama.WaitForAll
+	}
 
 	producer, err := sarama.NewSyncProducer([]string{config.kafka}, saramaConfig)
 	if err != nil {
@@ -170,13 +179,29 @@ func startSarama() (chan result, error) {
 	return ch, nil
 }
 
+var config struct {
+	kafka          string
+	topic          string
+	partition      uint
+	updateInterval time.Duration
+	client         string
+	ack            string
+}
+
 func main() {
 	flag.StringVar(&config.kafka, "kafka", "localhost", "kafka address")
 	flag.StringVar(&config.topic, "topic", "latencytest", "kafka topic to use")
 	flag.UintVar(&config.partition, "partition", 0, "kafka partition to use")
 	flag.DurationVar(&config.updateInterval, "updateInterval", time.Second, "histogram update interval")
 	flag.StringVar(&config.client, "client", "optiopay", "client name (sarama or optiopay)")
+	flag.StringVar(&config.ack, "ack", "local", "ack waiting type (none or local or all)")
 	flag.Parse()
+
+	switch config.ack {
+	case "none", "local", "all":
+	default:
+		log.Fatalf("Wrong ack type %v.", config.ack)
+	}
 
 	var (
 		uptime = time.Now()
