@@ -91,6 +91,9 @@ func startOptiopay() (chan result, error) {
 			if start.Sub(b) > config.updateInterval {
 				persec := (requests - requestsSaved) / uint64(config.updateInterval.Seconds())
 				ch <- newResult(requests, persec, hist)
+				if config.resetHistogram {
+					hist.Reset()
+				}
 				b = start
 				start = time.Now()
 				requestsSaved = requests
@@ -161,6 +164,9 @@ func startSarama() (chan result, error) {
 			if start.Sub(b) > config.updateInterval {
 				persec := (requests - requestsSaved) / uint64(config.updateInterval.Seconds())
 				ch <- newResult(requests, persec, hist)
+				if config.resetHistogram {
+					hist.Reset()
+				}
 				b = start
 				start = time.Now()
 				requestsSaved = requests
@@ -184,6 +190,7 @@ var config struct {
 	topic          string
 	partition      uint
 	updateInterval time.Duration
+	resetHistogram bool
 	client         string
 	ack            string
 }
@@ -195,6 +202,7 @@ func main() {
 	flag.DurationVar(&config.updateInterval, "updateInterval", time.Second, "histogram update interval")
 	flag.StringVar(&config.client, "client", "optiopay", "client name (sarama or optiopay)")
 	flag.StringVar(&config.ack, "ack", "local", "ack waiting type (none or local or all)")
+	flag.BoolVar(&config.resetHistogram, "resetHistogram", true, "reset histogram each interval")
 	flag.Parse()
 
 	switch config.ack {
